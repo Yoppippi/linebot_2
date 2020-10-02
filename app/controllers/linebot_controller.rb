@@ -1,10 +1,9 @@
 class LinebotController < ApplicationController
-  require 'line/bot'  # gem 'line-bot-api'
+  require 'line/bot'  
   require 'open-uri'
   require 'kconv'
   require 'rexml/document'
 
-  # callbackアクションのCSRFトークン認証を無効
   protect_from_forgery :except => [:callback]
 
   def callback
@@ -16,21 +15,16 @@ class LinebotController < ApplicationController
     events = client.parse_events_from(body)
     events.each { |event|
       case event
-        # メッセージが送信された場合の対応（機能①）
       when Line::Bot::Event::Message
         case event.type
-          # ユーザーからテキスト形式のメッセージが送られて来た場合
         when Line::Bot::Event::MessageType::Text
-          # event.message['text']：ユーザーから送られたメッセージ
           input = event.message['text']
           url  = "https://www.drk7.jp/weather/xml/13.xml"
           xml  = open( url ).read.toutf8
           doc = REXML::Document.new(xml)
           xpath = 'weatherforecast/pref/area[4]/'
-          # 当日朝のメッセージの送信の下限値は20％としているが、明日・明後日雨が降るかどうかの下限値は30％としている
           min_per = 30
           case input
-            # 「今日」or「きょう」というワードが含まれる場合
           when /.*(今日|きょう).*/
             per06to12 = doc.elements[xpath + 'info/rainfallchance/period[2]l'].text
             per12to18 = doc.elements[xpath + 'info/rainfallchance/period[3]l'].text
@@ -42,9 +36,7 @@ class LinebotController < ApplicationController
               push =
                 "今日は雨が降らない予定です。\n降水確率はこんな感じです。\n　  6〜12時　#{per06to12}％\n　12〜18時　 #{per12to18}％\n　18〜24時　#{per18to24}％"
             end
-            # 「明日」or「あした」というワードが含まれる場合
           when /.*(明日|あした).*/
-            # info[2]：明日の天気
             per06to12 = doc.elements[xpath + 'info[2]/rainfallchance/period[2]'].text
             per12to18 = doc.elements[xpath + 'info[2]/rainfallchance/period[3]'].text
             per18to24 = doc.elements[xpath + 'info[2]/rainfallchance/period[4]'].text
@@ -65,8 +57,7 @@ class LinebotController < ApplicationController
             else
               push =
                 "明後日は雨が降らない予定です"
-            end
-#  ---------------------------------------   
+            end 
           when /.*(怪しい人|あやしいひと).*/
             push =
               "近くのコンビニエンスストアでiTunesのプリペイドカードを買うのを手伝ってもらえますか？"
@@ -88,12 +79,10 @@ class LinebotController < ApplicationController
           when /.*(ありがとう|さんきゅー).*/
             push =
               "礼には及びません"
-#  ---------------------------------------
           else
             push =
               "名前を呼んでくれると怪しい発言をします。\n天気についても答えます。"
           end
-          # テキスト以外（画像等）のメッセージが送られた場合
         else
           push = "テキスト以外は分からんな"
         end
@@ -102,14 +91,10 @@ class LinebotController < ApplicationController
           text: push
         }
         client.reply_message(event['replyToken'], message)
-        # LINEお友達追された場合（機能②）
       when Line::Bot::Event::Follow
-        # 登録したユーザーのidをユーザーテーブルに格納
         line_id = event['source']['userId']
         User.create(line_id: line_id)
-        # LINEお友達解除された場合（機能③）
       when Line::Bot::Event::Unfollow
-        # お友達解除したユーザーのデータをユーザーテーブルから削除
         line_id = event['source']['userId']
         User.find_by(line_id: line_id).destroy
       end
